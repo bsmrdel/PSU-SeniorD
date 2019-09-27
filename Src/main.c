@@ -23,8 +23,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "arm_math.h"
-#include "stdint.h"
+    #include "arm_math.h"
+    #include "stdint.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -34,8 +34,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define VOLT_DIV_FACTOR		0.0595 	// assuming R1 = 15.8k and R2 = 1k
-#define CURR_DIV_FACTOR 	0.5		// CSA gain is 0.5V/A
+    #define VOLT_DIV_FACTOR		0.0595 	// assuming R1 = 15.8k and R2 = 1k
+    #define CURR_DIV_FACTOR 	0.5		// CSA gain is 0.5V/A
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -49,15 +49,13 @@ ADC_HandleTypeDef hadc;
 TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN PV */
-    int raw_voltage = 0;
-    int raw_current = 0;
-    float voltage = 0;
-    float current = 0;
-    float percent_voltage = 0;
-    float percent_current = 0;
     float pwm_val = 0;
     float v_sense = 0;
     float i_sense = 0;
+    float pid_error = 0;
+    int user_en = 1;                //output enable
+    float i_lim = 0.3;                //user selected current limit
+    float v_lim = 12;                //user selected voltage limiit
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -81,6 +79,21 @@ void user_pwm_setvalue(uint16_t value);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+    int raw_voltage = 0;            //12b value from adc for vsense
+    int raw_current = 0;            //12b value from adc for isense
+    float voltage = 0;              //0-3V conversion for voltage
+    float current = 0;              //0-3V conversion for current
+    float percent_voltage = 0;      //%V from 0-3
+    float percent_current = 0;      //%I signal from 0-3V
+
+    float PID_Kp = 10;             //proportional gain
+    float PID_Ki = 0.025;           //integral gain
+    float PID_Kd = 100;              //derivative gain
+
+
+
+
+    float rload = 0;                //calculated load resistance
 
   /* USER CODE END 1 */
   
@@ -91,7 +104,13 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+      arm_pid_instance_f32 PID;     //ARM PID instance float 32b
 
+      PID.Kp = PID_Kp;
+      PID.Ki = PID_Ki;
+      PID.Kd = PID_Kd;
+
+      arm_pid_init_f32(&PID, 1);
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -107,62 +126,70 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
-
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+      user_en = HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
 
 
-      HAL_ADC_Start(&hadc);                     //start ADC
-      HAL_ADC_PollForConversion(&hadc, 10);     //poll until complete
-      raw_current = HAL_ADC_GetValue(&hadc);    //collect raw current
-
-      HAL_ADC_Start(&hadc);                     //start ADC
-      HAL_ADC_PollForConversion(&hadc, 10);     //poll until complete
-      raw_voltage = HAL_ADC_GetValue(&hadc);    //collect raw voltage
-
-      HAL_ADC_Stop(&hadc);
-
-      percent_voltage = ((float) raw_voltage) / 4092;
-      percent_current = ((float) raw_current) / 4092;
-
-      voltage = percent_voltage * 3;
-      current = percent_current * 3;
-
-      v_sense = voltage / VOLT_DIV_FACTOR;
-      i_sense = current / CURR_DIV_FACTOR;
 
 
-/*
-      if(voltage < 1.5) {
+      HAL_ADC_Start(&hadc);                             //start ADC
+      HAL_ADC_PollForConversion(&hadc, 10);             //poll until complete
+      raw_voltage = HAL_ADC_GetValue(&hadc);            //collect raw voltage
+
+      HAL_ADC_Start(&hadc);                             //start ADC
+      HAL_ADC_PollForConversion(&hadc, 10);             //poll until complete
+      raw_current = HAL_ADC_GetValue(&hadc);            //collect raw current
+
+      HAL_ADC_Stop(&hadc);                              //stop ADC
+
+      percent_voltage = ((float) raw_voltage) / 4092;   //%V
+      percent_current = ((float) raw_current) / 4092;   //%I
+
+      voltage = percent_voltage * 3;                    //0-3V voltage signal
+      current = percent_current * 3;                    //0-3V current signal
+
+      v_sense = voltage / VOLT_DIV_FACTOR;              //0-50V voltage
+      i_sense = current / CURR_DIV_FACTOR;              //0-3A current
+      rload = v_sense / i_sense;                       //calculated load R???
+
+
+      //for debugging only (simulated current and voltage sensing)
+      if(voltage < 1.5)
          HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
-      }
-      else {
+      else
           HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
-      }
 
-      if(current < 1.5) {
+      if(current < 1.5)
           HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-      }
-      else {
+      else
           HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
-      }
-*/
 
-     // HAL_TIM_PWM
-      //HAL_Delay(1000);
-      pwm_val = (uint16_t) (voltage * current); //multiply the two for fun right now
-      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,pwm_val);
+
+      //PWM calculation via controls
+      pid_error = v_lim - v_sense;
+      pwm_val = arm_pid_f32(&PID, pid_error);
+
+
+
+
+      //pwm_val = (uint16_t) (v_sense * i_sense); //multiply the two for fun right now
+      //__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,pwm_val);
       //pwm_val = 500;
       //HAL_Delay(100);
       //user_pwm_setvalue(pwm_val);
+
+
   }
   /* USER CODE END 3 */
 }
@@ -283,9 +310,9 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 480-1;
+  htim1.Init.Prescaler = 1-1;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 10-1;
+  htim1.Init.Period = 960-1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -355,8 +382,8 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_EVT_RISING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Mode = GPIO_MODE_EVT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LD4_Pin LD3_Pin */
