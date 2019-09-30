@@ -52,8 +52,9 @@ TIM_HandleTypeDef htim1;
     float pwm_val = 0;
     float v_sense = 0;
     float i_sense = 0;
+    float rload = 0;                //calculated load resistance??
     float pid_error = 0;
-    int user_en = 1;                //output enable
+    int user_en = 1;                	//output enable
     float i_lim = 0.3;                //user selected current limit
     float v_lim = 12;                //user selected voltage limiit
 /* USER CODE END PV */
@@ -64,7 +65,7 @@ static void MX_GPIO_Init(void);
 static void MX_ADC_Init(void);
 static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
-void user_pwm_setvalue(uint16_t value);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -86,14 +87,9 @@ int main(void)
     float percent_voltage = 0;      //%V from 0-3
     float percent_current = 0;      //%I signal from 0-3V
 
-    float PID_Kp = 10;             //proportional gain
-    float PID_Ki = 0.025;           //integral gain
-    float PID_Kd = 100;              //derivative gain
-
-
-
-
-    float rload = 0;                //calculated load resistance
+    float PID_Kp = 20;             //proportional gain
+    float PID_Ki = 0.001;           //integral gain
+    float PID_Kd = 0;              //derivative gain
 
   /* USER CODE END 1 */
   
@@ -111,6 +107,7 @@ int main(void)
       PID.Kd = PID_Kd;
 
       arm_pid_init_f32(&PID, 1);
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -140,9 +137,6 @@ int main(void)
     /* USER CODE BEGIN 3 */
       user_en = HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin);
 
-
-
-
       HAL_ADC_Start(&hadc);                             //start ADC
       HAL_ADC_PollForConversion(&hadc, 10);             //poll until complete
       raw_voltage = HAL_ADC_GetValue(&hadc);            //collect raw voltage
@@ -161,7 +155,7 @@ int main(void)
 
       v_sense = voltage / VOLT_DIV_FACTOR;              //0-50V voltage
       i_sense = current / CURR_DIV_FACTOR;              //0-3A current
-      rload = v_sense / i_sense;                       //calculated load R???
+      rload = v_sense / i_sense;                       	//calculated load R???
 
 
       //for debugging only (simulated current and voltage sensing)
@@ -180,14 +174,16 @@ int main(void)
       pid_error = v_lim - v_sense;
       pwm_val = arm_pid_f32(&PID, pid_error);
 
+      if(pwm_val > 950)
+    	pwm_val = 950;
 
-
+      if(pwm_val < 0)
+    	  pwm_val = 0;
 
       //pwm_val = (uint16_t) (v_sense * i_sense); //multiply the two for fun right now
-      //__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,pwm_val);
-      //pwm_val = 500;
-      //HAL_Delay(100);
-      //user_pwm_setvalue(pwm_val);
+
+
+      __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,pwm_val);
 
 
   }
@@ -396,20 +392,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void user_pwm_setvalue(uint16_t value)
-{
-  /*  TIM_OC_InitTypeDef sConfigOC;
 
-    sConfigOC.OCMode = TIM_OCMODE_PWM1;
-    sConfigOC.Pulse = value;
-    sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-    sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-    HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-
-    return;*/
-
-}
 /* USER CODE END 4 */
 
 /**
