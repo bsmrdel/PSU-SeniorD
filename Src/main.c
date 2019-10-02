@@ -57,6 +57,7 @@ TIM_HandleTypeDef htim1;
     int user_en = 1;                	//output enable
     float i_lim = 0.3;                //user selected current limit
     float v_lim = 12;                //user selected voltage limiit
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -172,7 +173,8 @@ int main(void)
 
       //PWM calculation via controls
       pid_error = v_lim - v_sense;
-      pwm_val = arm_pid_f32(&PID, pid_error);
+      //pwm_val = arm_pid_f32(&PID, pid_error);
+      pwm_val = voltage*300;
 
       if(pwm_val > 950)
     	pwm_val = 950;
