@@ -34,8 +34,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-    #define VOLT_DIV_FACTOR		0.0595 	// assuming R1 = 15.8k and R2 = 1k
-    #define CURR_DIV_FACTOR 	0.5		// CSA gain is 0.5V/A
+    #define VOLT_DIV_FACTOR		0.0490 	// assuming R1 = 16.4k and R2 = 1k
+    #define CURR_DIV_FACTOR 	0.5*0.35		// CSA gain is 0.5V/A
+	#define N					5000		// moving avg approx uses 500 past samples
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,13 +51,19 @@ TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN PV */
     float pwm_val = 0;
+    float pwm_val_test = 0;
     float v_sense = 0;
     float i_sense = 0;
     float rload = 0;                //calculated load resistance??
     float pid_error = 0;
     int user_en = 1;                	//output enable
-    float i_lim = 0.3;                //user selected current limit
-    float v_lim = 12;                //user selected voltage limiit
+    float i_lim = 0.020;                //user selected current limit
+    float v_lim = 5;                //user selected voltage limiit
+    float v_sense_avg = 0;
+    float i_sense_avg = 0;
+    float pid_error_avg = 0;
+
+    int cv_cc = 1;					//cv = 1, cc = 0 (modes of operation)
 
 /* USER CODE END PV */
 
@@ -66,7 +73,7 @@ static void MX_GPIO_Init(void);
 static void MX_ADC_Init(void);
 static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
-
+static float approxMovingAvg(float avg, float new_sample);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -88,9 +95,9 @@ int main(void)
     float percent_voltage = 0;      //%V from 0-3
     float percent_current = 0;      //%I signal from 0-3V
 
-    float PID_Kp = 20;             //proportional gain
+    float PID_Kp = 300;             //proportional gain
     float PID_Ki = 0.001;           //integral gain
-    float PID_Kd = 0;              //derivative gain
+    float PID_Kd = -5;              //derivative gain
 
   /* USER CODE END 1 */
   
@@ -125,6 +132,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
 
+  HAL_Delay(100);	//delay to allow micro to startup before pwm output
 
 
   /* USER CODE END 2 */
@@ -151,16 +159,26 @@ int main(void)
       percent_voltage = ((float) raw_voltage) / 4092;   //%V
       percent_current = ((float) raw_current) / 4092;   //%I
 
+
+
       voltage = percent_voltage * 3;                    //0-3V voltage signal
       current = percent_current * 3;                    //0-3V current signal
 
       v_sense = voltage / VOLT_DIV_FACTOR;              //0-50V voltage
       i_sense = current / CURR_DIV_FACTOR;              //0-3A current
-      rload = v_sense / i_sense;                       	//calculated load R???
 
+      v_sense_avg = approxMovingAvg(v_sense_avg, v_sense);
+      i_sense_avg = approxMovingAvg(i_sense_avg, i_sense);
+
+      rload = v_sense_avg / i_sense_avg;                       	//calculated load R???
+
+      if(i_sense_avg >= i_lim)	//cc mode
+    	  cv_cc = 0;
+      else if(v_sense_avg >= v_lim)	//cv mode
+    	  cv_cc = 1;
 
       //for debugging only (simulated current and voltage sensing)
-      if(voltage < 1.5)
+    /*  if(voltage < 1.5)
          HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
       else
           HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
@@ -169,24 +187,44 @@ int main(void)
           HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
       else
           HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
+	*/
+
+      if(cv_cc == 1){
+    	  HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+    	  HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
+      }
+      else
+      {
+    	  HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
+    	  HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
+      }
+
+      if(cv_cc == 1){ 	//if in CV mode
+    	  pid_error = v_lim - v_sense_avg;
+	  }
+      else {			//in CC mode
+    	  pid_error = i_lim - i_sense_avg;
+      }
 
 
-      //PWM calculation via controls
-      pid_error = v_lim - v_sense;
-      //pwm_val = arm_pid_f32(&PID, pid_error);
-      pwm_val = voltage*300;
 
-      if(pwm_val > 950)
-    	pwm_val = 950;
+      //PWM calculation via PID
+      //pid_error = v_lim - v_sense_avg;
+      //pid_error_avg = approxMovingAvg(pid_error_avg, pid_error);
+      pwm_val = arm_pid_f32(&PID, pid_error);
+
+      //for debugging using potentiometer
+      //pwm_val = current*30;
+
+      //pwm max duty cycle values
+      if(pwm_val > 46)
+    	pwm_val = 46;
 
       if(pwm_val < 0)
     	  pwm_val = 0;
 
-      //pwm_val = (uint16_t) (v_sense * i_sense); //multiply the two for fun right now
-
-
+      //setting new PWM val in timer reg
       __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,pwm_val);
-
 
   }
   /* USER CODE END 3 */
@@ -310,7 +348,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 1-1;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 960-1;
+  htim1.Init.Period = 48-1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -394,7 +432,13 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static float approxMovingAvg(float avg, float newsample)
+{
+	avg -= avg / N;
+	avg += newsample / N;
 
+	return avg;
+}
 /* USER CODE END 4 */
 
 /**
