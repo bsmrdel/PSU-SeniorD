@@ -24,7 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
     #include "arm_math.h"
-    #include "stdint.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -36,7 +36,7 @@
 /* USER CODE BEGIN PD */
     #define VOLT_DIV_FACTOR		0.0490 	// assuming R1 = 16.4k and R2 = 1k
     #define CURR_DIV_FACTOR 	0.5*0.35		// CSA gain is 0.5V/A
-	#define N					5000		// moving avg approx uses 500 past samples
+	#define N					500		// moving avg approx uses 500 past samples
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -51,7 +51,6 @@ TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN PV */
     float pwm_val = 0;
-    float pwm_val_test = 0;
     float v_sense = 0;
     float i_sense = 0;
     float rload = 0;                //calculated load resistance??
