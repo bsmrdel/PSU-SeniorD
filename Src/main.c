@@ -130,7 +130,7 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
   HAL_Delay(100);	//delay to allow micro to startup before pwm output
 
 
@@ -157,8 +157,6 @@ int main(void)
 
       percent_voltage = ((float) raw_voltage) / 4092;   //%V
       percent_current = ((float) raw_current) / 4092;   //%I
-
-
 
       voltage = percent_voltage * 3;                    //0-3V voltage signal
       current = percent_current * 3;                    //0-3V current signal
@@ -210,14 +208,14 @@ int main(void)
       //PWM calculation via PID
       //pid_error = v_lim - v_sense_avg;
       //pid_error_avg = approxMovingAvg(pid_error_avg, pid_error);
-      pwm_val = arm_pid_f32(&PID, pid_error);
+      //pwm_val = arm_pid_f32(&PID, pid_error);
 
       //for debugging using potentiometer
-      //pwm_val = current*30;
+      pwm_val = current*30;
 
       //pwm max duty cycle values
-      if(pwm_val > 46)
-    	pwm_val = 46;
+      if(pwm_val > 100)
+    	pwm_val = 100;
 
       if(pwm_val < 0)
     	  pwm_val = 0;
@@ -347,7 +345,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 1-1;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 48-1;
+  htim1.Init.Period = 96-1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -371,7 +369,7 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 6;
+  sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
@@ -384,7 +382,7 @@ static void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
   sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.DeadTime = 5;
   sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
   sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;

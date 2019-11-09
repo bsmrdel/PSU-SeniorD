@@ -66,12 +66,14 @@ void Error_Handler(void);
 #define VSense_GPIO_Port GPIOA
 #define ISense_Pin GPIO_PIN_2
 #define ISense_GPIO_Port GPIOA
+#define BuckPWM_HI_Pin GPIO_PIN_7
+#define BuckPWM_HI_GPIO_Port GPIOA
 #define LD4_Pin GPIO_PIN_8
 #define LD4_GPIO_Port GPIOC
 #define LD3_Pin GPIO_PIN_9
 #define LD3_GPIO_Port GPIOC
-#define BuckPWM_Pin GPIO_PIN_8
-#define BuckPWM_GPIO_Port GPIOA
+#define BuckPWM_LO_Pin GPIO_PIN_8
+#define BuckPWM_LO_GPIO_Port GPIOA
 #define SWDIO_Pin GPIO_PIN_13
 #define SWDIO_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14
